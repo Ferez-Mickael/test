@@ -11,7 +11,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required to fetch all commits in the PR for validation
+          fetch-depth: 0 # Fetches all history so git log can safely scan the commits
 
       - name: 1. Validate Branch Name
         env:
@@ -19,7 +19,7 @@ jobs:
         run: |
           echo "Checking Branch Name: $BRANCH_NAME"
           
-          # Allows: PROJ-123/feat-description (or any uppercase Jira project key)
+          # Allows: PROJ-123/feat-description
           REGEX="^[A-Z]+-[0-9]+\/(feat|fix|refactor|chore|docs|test|perf|build|ci|revert)-.+$"
           
           if [[ ! "$BRANCH_NAME" =~ $REGEX ]]; then
@@ -51,13 +51,19 @@ jobs:
         run: |
           echo "Checking all commits in this Pull Request..."
           
-          # Get all commit messages in the PR (excluding merges to avoid false positives)
-          COMMITS=$(git log --no-merges --format=%s origin/${{ github.base_ref }}..origin/${{ github.head_ref }})
+          # Use precise commit SHAs to isolate only the new commits introduced by this PR
+          COMMITS=$(git log --no-merges --format=%s ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
+          
+          # Guard clause to handle empty commit arrays safely
+          if [[ -z "$COMMITS" ]]; then
+            echo "✅ No new commits found to validate."
+            exit 0
+          fi
           
           # Allows: [PROJ-123] feat(scope): subject OR [PROJ-123] feat: subject
           REGEX="^\[[A-Z]+-[0-9]+\] (feat|fix|refactor|chore|docs|test|perf|build|ci|revert)(\([a-z-]+\))?: .+$"
           
-          # Iterate through each commit message line by line
+          # Check every commit line by line
           while IFS= read -r commit; do
             echo "Checking commit: $commit"
             if [[ ! "$commit" =~ $REGEX ]]; then
