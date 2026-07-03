@@ -11,65 +11,62 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetches all history so git log can safely scan the commits
+          fetch-depth: 0 
 
+      # ------------------------------------------------------------------
+      # 1. BRANCH NAME CHECK
+      # ------------------------------------------------------------------
       - name: 1. Validate Branch Name
         env:
           BRANCH_NAME: ${{ github.head_ref }}
         run: |
           echo "Checking Branch Name: $BRANCH_NAME"
-          
-          # Allows: PROJ-123/feat-description
           REGEX="^[A-Z]+-[0-9]+\/(feat|fix|refactor|chore|docs|test|perf|build|ci|revert)-.+$"
           
           if [[ ! "$BRANCH_NAME" =~ $REGEX ]]; then
             echo "::error::Branch name '$BRANCH_NAME' is invalid."
             echo "Expected format: <JIRA-ID>/<type>-<description>"
-            echo "Example: PROJ-1024/feat-payment-gateway"
             exit 1
           fi
           echo "✅ Branch Name is valid!"
 
+      # ------------------------------------------------------------------
+      # 2. PULL REQUEST TITLE CHECK
+      # ------------------------------------------------------------------
       - name: 2. Validate PR Title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           echo "Checking PR Title: $PR_TITLE"
-          
-          # Allows: PROJ-123/Feat-Description OR [PROJ-123] Feat: Description
           REGEX="^(\[?[A-Z]+-[0-9]+\]?)[ \/](Feat|Fix|Refactor|Chore|Docs|Test|Perf|Build|Ci|Revert)[:-].+$"
           
           if [[ ! "$PR_TITLE" =~ $REGEX ]]; then
             echo "::error::PR Title '$PR_TITLE' is invalid."
             echo "Expected format: <JIRA-ID>/<Type>-<Subject>"
-            echo "Example: PROJ-205/Feat-Implement JWT token rotation"
             exit 1
           fi
           echo "✅ PR Title is valid!"
 
+      # ------------------------------------------------------------------
+      # 3. COMMIT MESSAGES CHECK
+      # ------------------------------------------------------------------
       - name: 3. Validate All Commit Messages
         run: |
           echo "Checking all commits in this Pull Request..."
-          
-          # Use precise commit SHAs to isolate only the new commits introduced by this PR
           COMMITS=$(git log --no-merges --format=%s ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }})
           
-          # Guard clause to handle empty commit arrays safely
           if [[ -z "$COMMITS" ]]; then
             echo "✅ No new commits found to validate."
             exit 0
           fi
           
-          # Allows: [PROJ-123] feat(scope): subject OR [PROJ-123] feat: subject
           REGEX="^\[[A-Z]+-[0-9]+\] (feat|fix|refactor|chore|docs|test|perf|build|ci|revert)(\([a-z-]+\))?: .+$"
           
-          # Check every commit line by line
           while IFS= read -r commit; do
             echo "Checking commit: $commit"
             if [[ ! "$commit" =~ $REGEX ]]; then
               echo "::error::Commit message '$commit' is invalid."
               echo "Expected format: '[JIRA-ID] type(scope): subject'"
-              echo "Example: [PROJ-1024] feat(auth): implement token rotation"
               exit 1
             fi
           done <<< "$COMMITS"
